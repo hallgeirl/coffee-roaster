@@ -34,12 +34,16 @@ int mosfetGate = 7;
 MAX6675 thermocouple_bt(thermoCLK_bt, thermoCS_bt, thermoDO_bt);
 MAX6675 thermocouple_et(thermoCLK_et, thermoCS_et, thermoDO_et);
 
-int led = LED_BUILTIN;  
+int led = LED_BUILTIN;
 unsigned long intervalMs = 1000;
 unsigned long startMillis;
 
+unsigned long modbusPollIntervalMs = 500;
+unsigned long modbusPollStartMillis;
+
+
 void setup() {
-  slave.begin( 19200); // 19200 baud, 8-bits, even, 1-bit stop
+  slave.begin(115200); // 19200 baud, 8-bits, even, 1-bit stop
   // use Arduino pins 
   pinMode(led, OUTPUT);
   pinMode(thermoVCC_bt, OUTPUT);
@@ -50,22 +54,35 @@ void setup() {
   digitalWrite(thermoGND_bt, LOW);
   digitalWrite(thermoVCC_et, HIGH);
   digitalWrite(mosfetGate, LOW);
-  delay(500);
 
   startMillis = millis();
+  modbusPollStartMillis = millis();
 }
 bool debug = false;
 char buf[256];
+int heatAmount = 0;
 
 void loop() {
-  au16data[2] = ((uint16_t) thermocouple_bt.readCelsius()*100);
-  au16data[3] = ((uint16_t) thermocouple_et.readCelsius()*100);
-  slave.poll( au16data, 16 );
-
-  int heatAmount = (((float)au16data[4])/100.f)*(float)intervalMs; // 0-100 value into "how many ms should I stay on"
-
   unsigned long currentMillis = millis();
+  if (currentMillis - modbusPollStartMillis >= modbusPollIntervalMs) {
+    au16data[2] = ((uint16_t) (thermocouple_bt.readCelsius()*100.0));
+    au16data[3] = ((uint16_t) (thermocouple_et.readCelsius()*100.0));
+    slave.poll( au16data, 16 );
+    heatAmount = (((float)au16data[4])/100.f)*(float)intervalMs; // 0-100 value into "how many ms should I stay on"  
+    if (debug) {
+      Serial.print("Polled.");
+      ltoa(au16data[2], buf, 10);
+      Serial.print(" bt: ");
+      Serial.print(buf);
 
+      ltoa(au16data[3], buf, 10);
+      Serial.print(" et: ");
+      Serial.println(buf);
+    }
+   
+    modbusPollStartMillis = millis();
+  }
+  
   if ((currentMillis-startMillis) < heatAmount) {
     digitalWrite(mosfetGate, HIGH);
     digitalWrite(led, HIGH);
