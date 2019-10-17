@@ -35,15 +35,15 @@ MAX6675 thermocouple_bt(thermoCLK_bt, thermoCS_bt, thermoDO_bt);
 MAX6675 thermocouple_et(thermoCLK_et, thermoCS_et, thermoDO_et);
 
 int led = LED_BUILTIN;
-unsigned long intervalMs = 1000;
+unsigned long intervalMs = 500;
 unsigned long startMillis;
 
-unsigned long modbusPollIntervalMs = 500;
+unsigned long modbusPollIntervalMs = 1000;
 unsigned long modbusPollStartMillis;
 
 
 void setup() {
-  slave.begin(115200); // 19200 baud, 8-bits, even, 1-bit stop
+  slave.begin(19200); // 19200 baud, 8-bits, even, 1-bit stop
   // use Arduino pins 
   pinMode(led, OUTPUT);
   pinMode(thermoVCC_bt, OUTPUT);
@@ -62,7 +62,35 @@ bool debug = false;
 char buf[256];
 int heatAmount = 0;
 
-void loop() {
+void loop()
+{
+  look_sync();
+}
+
+void look_sync()
+{
+  au16data[2] = ((uint16_t) (thermocouple_bt.readCelsius()*100.0));
+  au16data[3] = ((uint16_t) (thermocouple_et.readCelsius()*100.0));
+  slave.poll( au16data, 16 );
+  int heatAmountInt = au16data[4]; // 0-100 value into "how many ms should I stay on"  
+  
+  for (int i = 0; i < 100; i++)
+  {
+    if (i < heatAmountInt) 
+    {
+      digitalWrite(mosfetGate, HIGH);
+      digitalWrite(led, HIGH);      
+    }
+    else
+    {
+      digitalWrite(mosfetGate, LOW);
+      digitalWrite(led, LOW);
+    }
+    delay(5);
+  }
+}
+
+void loop_async() {
   unsigned long currentMillis = millis();
   if (currentMillis - modbusPollStartMillis >= modbusPollIntervalMs) {
     au16data[2] = ((uint16_t) (thermocouple_bt.readCelsius()*100.0));
