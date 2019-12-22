@@ -38,8 +38,8 @@ int led = LED_BUILTIN;
 unsigned long intervalMs = 500;
 unsigned long startMillis;
 
-unsigned long modbusPollIntervalMs = 1000;
-unsigned long modbusPollStartMillis;
+unsigned long thermocouplePollIntervalMs = 1000;
+unsigned long thermocouplePollStartMillis;
 
 
 void setup() {
@@ -56,7 +56,7 @@ void setup() {
   digitalWrite(mosfetGate, LOW);
 
   startMillis = millis();
-  modbusPollStartMillis = millis();
+  thermocouplePollStartMillis = millis();
 }
 bool debug = false;
 char buf[256];
@@ -64,13 +64,56 @@ int heatAmount = 0;
 
 void loop()
 {
-  look_sync();
+  loop_async();
 }
 
-void look_sync()
+void debug_printValueLn(const char* label, float value)
 {
-  au16data[2] = ((uint16_t) (thermocouple_bt.readCelsius()*100.0));
-  au16data[3] = ((uint16_t) (thermocouple_et.readCelsius()*100.0));
+  if (debug)
+  {
+    Serial.print(label);
+    dtostrf(value, 4, 2, buf);
+    Serial.println(buf);
+  }
+}
+
+void debug_printValue(const char* label, float value)
+{
+  if (debug)
+  {
+    Serial.print(label);
+    dtostrf(value, 4, 2, buf);
+    Serial.print(buf);
+    Serial.print(" ");  
+  }
+}
+
+
+float filterExp(float measurement, float prevFilteredValue, float weight)
+{
+  return weight * measurement + (1.0f-weight)*prevFilteredValue;
+}
+
+float prevFilteredValueEt = -1;
+float prevFilteredValueBt = -1;
+float filterWeight = 0.2;
+float getFilteredTemperature(MAX6675 thermocouple, float* prevValue)
+{
+  float reading = thermocouple.readCelsius()*100.0;
+  
+  if (*prevValue < 0)
+    (*prevValue) = reading;
+
+  float filteredValue = filterExp(reading, *prevValue, filterWeight);
+  *prevValue = filteredValue;
+  
+  return filteredValue;
+}
+
+void loop_sync()
+{
+  au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt)));
+  au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt)));
   slave.poll( au16data, 16 );
   int heatAmountInt = au16data[4]; // 0-100 value into "how many ms should I stay on"  
   
@@ -90,59 +133,47 @@ void look_sync()
   }
 }
 
+bool on = false;
 void loop_async() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - modbusPollStartMillis >= modbusPollIntervalMs) {
-    au16data[2] = ((uint16_t) (thermocouple_bt.readCelsius()*100.0));
-    au16data[3] = ((uint16_t) (thermocouple_et.readCelsius()*100.0));
-    slave.poll( au16data, 16 );
-    heatAmount = (((float)au16data[4])/100.f)*(float)intervalMs; // 0-100 value into "how many ms should I stay on"  
-    if (debug) {
-      Serial.print("Polled.");
-      ltoa(au16data[2], buf, 10);
-      Serial.print(" bt: ");
-      Serial.print(buf);
-
-      ltoa(au16data[3], buf, 10);
-      Serial.print(" et: ");
-      Serial.println(buf);
-    }
-   
-    modbusPollStartMillis = millis();
-  }
   
+  unsigned long currentMillis = millis();
+  if (currentMillis - thermocouplePollStartMillis >= thermocouplePollIntervalMs) {
+    au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt)));
+    au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt)));
+
+    debug_printValue("Polled. BT: ", au16data[2]);
+    debug_printValue("ET: ", au16data[3]);
+   
+    thermocouplePollStartMillis = millis();
+  }
+  slave.poll( au16data, 16 );
+
+  au16data[4]  = 50;
+  heatAmount = (((float)au16data[4])/100.f)*(float)intervalMs; // 0-100 value into "how many ms should I stay on"  
+
   if ((currentMillis-startMillis) < heatAmount) {
     digitalWrite(mosfetGate, HIGH);
     digitalWrite(led, HIGH);
+    if (!on)
+      Serial.println("Switched ON");
+    on = true;
   }
   else {
     digitalWrite(mosfetGate, LOW);
     digitalWrite(led, LOW);
+    if (on)
+      Serial.println("Switched OFF");
+    on = false;
   }
 
-  if (debug) {
-    Serial.print("heatAmount: ");
-    dtostrf(heatAmount, 4, 2, buf);
-    Serial.print(buf);
+  debug_printValue("heatAmount: ", heatAmount);
+  debug_printValue("currentMillis: ", (float)currentMillis);
+  debug_printValueLn("startMillis: ", (float)startMillis);
     
-    Serial.print(" currentMillis: ");
-    ltoa(currentMillis, buf, 10);
-    Serial.print(buf);
-    
-    Serial.print(" startMillis: ");
-    ltoa(startMillis, buf, 10);
-    Serial.println(buf);
-  }
-  
-
   if (currentMillis - startMillis >= intervalMs) {
     unsigned long err = (currentMillis - startMillis)-intervalMs;
     startMillis = millis();
 
-    if (debug) {
-      Serial.print("err: ");
-      ltoa(err, buf, 10);
-      Serial.println(buf);
-    }
+    debug_printValueLn("Error (overshoot in ms): ", (float)err);
   }
 }
