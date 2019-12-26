@@ -1,1 +1,0 @@
-Copy the folders as is to the Arduino libraries folder (For windows, typically at: C:\Users\<username>\Documents\Arduino\libraries).

@@ -1,12 +1,13 @@
 // this example is public domain. enjoy!
 // www.ladyada.net/learn/sensors/thermocouple
 
-#include <max6675.h>
-#include <ModbusRtu.h>
+#include "max6675.h"
+#include "ModbusRtu.h"
 
 // data array for modbus network sharing
 uint16_t au16data[16] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, -1 };
+
 
 /**
  *  Modbus object declaration
