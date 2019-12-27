@@ -38,12 +38,12 @@ int led = LED_BUILTIN;
 unsigned long intervalMs = 500;
 unsigned long startMillis;
 
-unsigned long thermocouplePollIntervalMs = 1000;
+unsigned long thermocouplePollIntervalMs = 230;
 unsigned long thermocouplePollStartMillis;
 
 
 void setup() {
-  slave.begin(19200); // 19200 baud, 8-bits, even, 1-bit stop
+  slave.begin(115200); // 19200 baud, 8-bits, even, 1-bit stop
   // use Arduino pins 
   pinMode(led, OUTPUT);
   pinMode(thermoVCC_bt, OUTPUT);
@@ -52,6 +52,8 @@ void setup() {
   digitalWrite(thermoVCC_bt, HIGH);
   digitalWrite(thermoVCC_et, HIGH);
   digitalWrite(mosfetGate, LOW);
+
+  delay(500);
 
   startMillis = millis();
   thermocouplePollStartMillis = millis();
@@ -138,11 +140,11 @@ void loop_async() {
   if (currentMillis - thermocouplePollStartMillis >= thermocouplePollIntervalMs) {
     au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt)));
     au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt)));
-
-    debug_printValue("Polled. BT: ", au16data[2]);
+    
+    debug_printValue("BT: ", au16data[2]);
     debug_printValue("ET: ", au16data[3]);
-   
     thermocouplePollStartMillis = millis();
+    debug_printValueLn("Time to read: ", (thermocouplePollStartMillis-currentMillis));
   }
   slave.poll( au16data, 16 );
   heatAmount = (((float)au16data[4])/100.f)*(float)intervalMs; // 0-100 value into "how many ms should I stay on"  
@@ -162,10 +164,11 @@ void loop_async() {
     on = false;
   }
 
-  debug_printValue("heatAmount: ", heatAmount);
-  debug_printValue("currentMillis: ", (float)currentMillis);
-  debug_printValueLn("startMillis: ", (float)startMillis);
-    
+  /*
+   debug_printValue("heatAmount: ", heatAmount);
+   debug_printValue("currentMillis: ", (float)currentMillis);
+   debug_printValueLn("startMillis: ", (float)startMillis);
+  */ 
   if (currentMillis - startMillis >= intervalMs) {
     unsigned long err = (currentMillis - startMillis)-intervalMs;
     startMillis = millis();
