@@ -22,7 +22,6 @@ int thermoCS_bt = 11;
 int thermoCLK_bt = 10;
 int thermoDO_bt = 12;
 int thermoVCC_bt = 9;
-int thermoGND_bt = 8;
 
 int thermoCS_et = 4;
 int thermoCLK_et = 3;
@@ -47,11 +46,9 @@ void setup() {
   // use Arduino pins 
   pinMode(led, OUTPUT);
   pinMode(thermoVCC_bt, OUTPUT);
-  pinMode(thermoGND_bt, OUTPUT);
   pinMode(thermoVCC_et, OUTPUT);
   pinMode(mosfetGate, OUTPUT);
   digitalWrite(thermoVCC_bt, HIGH);
-  digitalWrite(thermoGND_bt, LOW);
   digitalWrite(thermoVCC_et, HIGH);
   digitalWrite(mosfetGate, LOW);
 
@@ -96,7 +93,7 @@ float filterExp(float measurement, float prevFilteredValue, float weight)
 
 float prevFilteredValueEt = -1;
 float prevFilteredValueBt = -1;
-float filterWeight = 0.2;
+float filterWeight = 0.15;
 float getFilteredTemperature(MAX6675 thermocouple, float* prevValue)
 {
   float reading = thermocouple.readCelsius()*100.0;
@@ -147,8 +144,6 @@ void loop_async() {
     thermocouplePollStartMillis = millis();
   }
   slave.poll( au16data, 16 );
-
-  au16data[4]  = 50;
   heatAmount = (((float)au16data[4])/100.f)*(float)intervalMs; // 0-100 value into "how many ms should I stay on"  
 
   if ((currentMillis-startMillis) < heatAmount) {
