@@ -3,6 +3,8 @@
 
 #include "max6675.h"
 #include "ModbusRtu.h"
+#include "SimpleKalmanFilter.h"
+
 
 // data array for modbus network sharing
 uint16_t au16data[16] = {
@@ -34,12 +36,16 @@ int mosfetGate = 7;
 MAX6675 thermocouple_bt(thermoCLK_bt, thermoCS_bt, thermoDO_bt);
 MAX6675 thermocouple_et(thermoCLK_et, thermoCS_et, thermoDO_et);
 
+SimpleKalmanFilter btKalmanFilter(0.1, 0.1, 0.01);
+SimpleKalmanFilter etKalmanFilter(0.1, 0.1, 0.01);
+
 int led = LED_BUILTIN;
 unsigned long intervalMs = 500;
 unsigned long startMillis;
 
 unsigned long thermocouplePollIntervalMs = 230;
 unsigned long thermocouplePollStartMillis;
+
 
 
 void setup() {
@@ -94,17 +100,24 @@ float filterExp(float measurement, float prevFilteredValue, float weight)
   return weight * measurement + (1.0f-weight)*prevFilteredValue;
 }
 
+float filterKalman(float measurement, SimpleKalmanFilter* kalmanFilter)
+{
+  return kalmanFilter->updateEstimate(measurement);
+}
+
 float prevFilteredValueEt = -1;
 float prevFilteredValueBt = -1;
 float filterWeight = 0.15;
-float getFilteredTemperature(MAX6675 thermocouple, float* prevValue)
+float getFilteredTemperature(MAX6675 thermocouple, float* prevValue, SimpleKalmanFilter* kalmanFilter)
 {
   float reading = thermocouple.readCelsius()*100.0;
   
   if (*prevValue < 0)
     (*prevValue) = reading;
 
-  float filteredValue = filterExp(reading, *prevValue, filterWeight);
+  //float filteredValue = filterExp(reading, *prevValue, filterWeight);
+  float filteredValue = filterKalman(reading, kalmanFilter);
+  
   *prevValue = filteredValue;
   
   return filteredValue;
@@ -112,8 +125,8 @@ float getFilteredTemperature(MAX6675 thermocouple, float* prevValue)
 
 void loop_sync()
 {
-  au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt)));
-  au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt)));
+  au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt, &btKalmanFilter)));
+  au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter)));
   slave.poll( au16data, 16 );
   int heatAmountInt = au16data[4]; // 0-100 value into "how many ms should I stay on"  
   
@@ -138,8 +151,8 @@ void loop_async() {
   
   unsigned long currentMillis = millis();
   if (currentMillis - thermocouplePollStartMillis >= thermocouplePollIntervalMs) {
-    au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt)));
-    au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt)));
+    au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt, &btKalmanFilter)));
+    au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter)));
     
     debug_printValue("BT: ", au16data[2]);
     debug_printValue("ET: ", au16data[3]);
