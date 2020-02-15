@@ -36,8 +36,9 @@ int mosfetGate = 7;
 MAX6675 thermocouple_bt(thermoCLK_bt, thermoCS_bt, thermoDO_bt);
 MAX6675 thermocouple_et(thermoCLK_et, thermoCS_et, thermoDO_et);
 
-SimpleKalmanFilter btKalmanFilter(0.1, 0.1, 0.01);
-SimpleKalmanFilter etKalmanFilter(0.1, 0.1, 0.01);
+float kalmanEst = 0.4, kalmanQ = 0.01;
+SimpleKalmanFilter btKalmanFilter(kalmanEst, kalmanEst, kalmanQ);
+SimpleKalmanFilter etKalmanFilter(kalmanEst, kalmanEst, kalmanQ);
 
 int led = LED_BUILTIN;
 unsigned long intervalMs = 500;
@@ -71,6 +72,14 @@ int heatAmount = 0;
 void loop()
 {
   loop_async();
+}
+
+void debug_println(const char* text)
+{
+  if (debug)
+  {
+    Serial.print(text);
+  }
 }
 
 void debug_printValueLn(const char* label, float value)
@@ -108,16 +117,19 @@ float filterKalman(float measurement, SimpleKalmanFilter* kalmanFilter)
 float prevFilteredValueEt = -1;
 float prevFilteredValueBt = -1;
 float filterWeight = 0.15;
-float getFilteredTemperature(MAX6675 thermocouple, float* prevValue, SimpleKalmanFilter* kalmanFilter)
+float getFilteredTemperature(MAX6675 thermocouple, float* prevValue, SimpleKalmanFilter* kalmanFilter, int filterType = 0 /* 0 = kalman, 1 = exponential, 2 = none*/)
 {
-  float reading = thermocouple.readCelsius()*100.0;
+  float reading = thermocouple.readCelsius();
   
   if (*prevValue < 0)
     (*prevValue) = reading;
 
-  //float filteredValue = filterExp(reading, *prevValue, filterWeight);
-  float filteredValue = filterKalman(reading, kalmanFilter);
-  
+  float filteredValue = reading;
+  if (filterType == 0)
+    filteredValue = filterKalman(reading, kalmanFilter);
+  else if (filterType == 1)
+    filteredValue = filterExp(reading, *prevValue, filterWeight);
+
   *prevValue = filteredValue;
   
   return filteredValue;
@@ -125,8 +137,8 @@ float getFilteredTemperature(MAX6675 thermocouple, float* prevValue, SimpleKalma
 
 void loop_sync()
 {
-  au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt, &btKalmanFilter)));
-  au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter)));
+  au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt, &btKalmanFilter) * 100.0));
+  au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter) * 100.0));
   slave.poll( au16data, 16 );
   int heatAmountInt = au16data[4]; // 0-100 value into "how many ms should I stay on"  
   
@@ -151,8 +163,10 @@ void loop_async() {
   
   unsigned long currentMillis = millis();
   if (currentMillis - thermocouplePollStartMillis >= thermocouplePollIntervalMs) {
-    au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt, &btKalmanFilter)));
-    au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter)));
+    au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt, &btKalmanFilter, 0) * 100.0));
+    au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter) * 100.0));
+    //au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueEt, &etKalmanFilter, 1) * 100.0));
+    //au16data[4] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueEt, &etKalmanFilter, 2) * 100.0));
     
     debug_printValue("BT: ", au16data[2]);
     debug_printValue("ET: ", au16data[3]);
@@ -166,14 +180,14 @@ void loop_async() {
     digitalWrite(mosfetGate, HIGH);
     digitalWrite(led, HIGH);
     if (!on)
-      Serial.println("Switched ON");
+      debug_println("Switched ON");
     on = true;
   }
   else {
     digitalWrite(mosfetGate, LOW);
     digitalWrite(led, LOW);
     if (on)
-      Serial.println("Switched OFF");
+      debug_println("Switched OFF");
     on = false;
   }
 
