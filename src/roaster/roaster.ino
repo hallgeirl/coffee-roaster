@@ -164,9 +164,9 @@ void loop_async() {
   unsigned long currentMillis = millis();
   if (currentMillis - thermocouplePollStartMillis >= thermocouplePollIntervalMs) {
     au16data[2] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt, &btKalmanFilter, 0) * 100.0));
-    au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter) * 100.0));
-    //au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueEt, &etKalmanFilter, 1) * 100.0));
-    //au16data[4] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueEt, &etKalmanFilter, 2) * 100.0));
+    au16data[3] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter, 0) * 100.0));
+    au16data[4] = ((uint16_t) (getFilteredTemperature(thermocouple_bt, &prevFilteredValueBt, &btKalmanFilter, 2) * 100.0));
+    au16data[5] = ((uint16_t) (getFilteredTemperature(thermocouple_et, &prevFilteredValueEt, &etKalmanFilter, 2) * 100.0));
     
     debug_printValue("BT: ", au16data[2]);
     debug_printValue("ET: ", au16data[3]);
