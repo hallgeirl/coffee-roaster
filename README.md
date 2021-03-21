@@ -1,4 +1,4 @@
-# coffee-roaster
+# Heat gun/bread maker + Arduino powered coffee roaster
 
 I've made a coffee roaster using a bread maker and a heat gun (a popular name for such an abomination is a corretto roaster). The source code for the Arduino snippet needed for temperature monitoring through the Artisan roasting software is included in the src folder. There's a couple of pictures of how the roaster looks in Images, and the electrical schematics in the schematics folder. I use https://www.diagrams.net/ for my schematics, and the file can be loaded in there.
 
